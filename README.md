@@ -2,7 +2,7 @@
 
 ## 다운로드
 실행 파일은 다음 위치에서 다운로드할 수 있습니다:
-- [최신 릴리즈](https://1drv.ms/u/s!AvURSZSJYcaoiL9bY2uTvNPcbpF-QQ?e=xRAYc)
+- [최신 릴리즈](https://www.youtube.com/@codingapple)
 - 아주아주 심각한 버그가 있다
 
 ## 직접 빌드하기
