@@ -25,12 +25,15 @@ class FFmpegInstaller(QThread):
 
     def __init__(self):
         super().__init__()
-        self.ffmpeg_dir = os.path.join(os.path.expanduser('~'), '.ffmpeg')
-
+        # 실행 파일과 같은 디렉토리에 FFmpeg 설치
+        self.ffmpeg_dir = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), 'ffmpeg')
+        
     def run(self):
         try:
             if not self.check_ffmpeg():
                 self.download_and_install_ffmpeg()
+            # 환경 변수 설정을 실행 시점에 항상 수행
+            self.set_ffmpeg_path()
             self.finished.emit()
         except Exception as e:
             self.error.emit(str(e))
@@ -39,14 +42,17 @@ class FFmpegInstaller(QThread):
         ffmpeg_path = os.path.join(self.ffmpeg_dir, 'ffmpeg.exe')
         return os.path.exists(ffmpeg_path)
 
+    def set_ffmpeg_path(self):
+        # 현재 프로세스의 환경 변수에 FFmpeg 경로 추가
+        os.environ['PATH'] = f"{self.ffmpeg_dir};{os.environ['PATH']}"
+        # yt-dlp에 FFmpeg 경로 직접 전달을 위해 저장
+        self.ffmpeg_path = os.path.join(self.ffmpeg_dir, 'ffmpeg.exe')
+
     def download_and_install_ffmpeg(self):
-        # FFmpeg 다운로드 URL (안정적인 버전 사용)
         ffmpeg_url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
         
-        # 다운로드 디렉토리 생성
         os.makedirs(self.ffmpeg_dir, exist_ok=True)
         
-        # FFmpeg 다운로드
         response = requests.get(ffmpeg_url, stream=True)
         total_size = int(response.headers.get('content-length', 0))
         
@@ -61,26 +67,21 @@ class FFmpegInstaller(QThread):
                 progress = int((downloaded / total_size) * 100)
                 self.progress.emit(progress)
         
-        # 압축 해제
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(self.ffmpeg_dir)
         
-        # 필요한 실행 파일만 이동
         extracted_dir = next(Path(self.ffmpeg_dir).glob('ffmpeg-*'))
         for file in ['ffmpeg.exe', 'ffprobe.exe']:
             src = extracted_dir / 'bin' / file
             dst = Path(self.ffmpeg_dir) / file
             if src.exists():
+                if dst.exists():
+                    dst.unlink()  # 기존 파일 삭제
                 os.replace(str(src), str(dst))
         
-        # 임시 파일 정리
         os.remove(zip_path)
         import shutil
         shutil.rmtree(str(extracted_dir))
-
-        # 환경 변수에 FFmpeg 경로 추가
-        if sys.platform == 'win32':
-            os.environ['PATH'] = f"{self.ffmpeg_dir};{os.environ['PATH']}"
 
 class DownloadThread(QThread):
     progress = pyqtSignal(dict)
@@ -179,9 +180,66 @@ class YouTubeDownloader(QMainWindow):
         super().__init__()
         self.setWindowTitle("미디어 다운로더")
         self.setMinimumWidth(600)
+        
+        # 시스템 트레이 아이콘 설정
+        self.create_tray_icon()
+        
         self.setup_ui()
-        self.setup_tray_icon()
         self.install_ffmpeg()
+        
+        # 종료 이벤트 처리를 위한 플래그
+        self.is_quitting = False
+
+    def create_tray_icon(self):
+        # 아이콘 리소스 로드
+        icon_path = self.get_resource_path('icon.ico')
+        self.tray_icon = QSystemTrayIcon(self)
+        self.tray_icon.setIcon(QIcon(icon_path))
+        
+        # 트레이 메뉴 생성
+        tray_menu = QMenu()
+        show_action = tray_menu.addAction("보이기")
+        quit_action = tray_menu.addAction("종료")
+        
+        # 이벤트 연결
+        show_action.triggered.connect(self.show)
+        quit_action.triggered.connect(self.quit_application)
+        
+        # 트레이 아이콘 더블 클릭 이벤트
+        self.tray_icon.activated.connect(self.tray_icon_activated)
+        
+        self.tray_icon.setContextMenu(tray_menu)
+        self.tray_icon.show()
+
+    def tray_icon_activated(self, reason):
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            self.show()
+            self.activateWindow()
+
+    def closeEvent(self, event):
+        if not self.is_quitting:
+            event.ignore()
+            self.hide()
+            self.tray_icon.showMessage(
+                "미디어 다운로더",
+                "프로그램이 시스템 트레이로 최소화되었습니다.",
+                QSystemTrayIcon.MessageIcon.Information,
+                2000
+            )
+        else:
+            self.tray_icon.hide()
+            event.accept()
+
+    def quit_application(self):
+        self.is_quitting = True
+        QApplication.quit()
+
+    @staticmethod
+    def get_resource_path(relative_path):
+        """리소스 파일의 절대 경로를 반환"""
+        if hasattr(sys, '_MEIPASS'):
+            return os.path.join(sys._MEIPASS, relative_path)
+        return os.path.join(os.path.abspath("."), relative_path)
 
     def setup_ui(self):
         self.setStyleSheet("""
@@ -363,20 +421,6 @@ class YouTubeDownloader(QMainWindow):
 
         # 드래그 앤 드롭 활성화
         self.setAcceptDrops(True)
-
-    def setup_tray_icon(self):
-        self.tray_icon = QSystemTrayIcon(self)
-        self.tray_icon.setIcon(QIcon('icon.ico'))
-        
-        tray_menu = QMenu()
-        show_action = tray_menu.addAction("보이기")
-        quit_action = tray_menu.addAction("종료")
-        
-        show_action.triggered.connect(self.show)
-        quit_action.triggered.connect(self.quit_application)
-        
-        self.tray_icon.setContextMenu(tray_menu)
-        self.tray_icon.show()
 
     def install_ffmpeg(self):
         self.ffmpeg_installer = FFmpegInstaller()
@@ -562,19 +606,6 @@ class YouTubeDownloader(QMainWindow):
         urls = [url.toLocalFile() for url in event.mimeData().urls()]
         if urls:
             self.url_input.setText(urls[0])
-
-    def closeEvent(self, event):
-        event.ignore()
-        self.hide()
-        self.tray_icon.showMessage(
-            "미디어 다운로더",
-            "프로그램이 시스템 트레이로 최소화되었습니다.",
-            QSystemTrayIcon.MessageIcon.Information,
-            2000
-        )
-
-    def quit_application(self):
-        QApplication.quit()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
