@@ -8,6 +8,8 @@
 Python 설치 (3.10버전 이상 권장)
   설치 시 "Add Python to PATH" 옵션을 반드시 체크해주세요.
 
+## [Python 설치](https://www.python.org/downloads/release/python-31111/)
+
 ## 실행 방법
 프로그램 다운로드
 다운로드 받은 파일의 압축을 풀고, 해당 폴더에서 ``setup.bat``을 실행하여 필요한 라이브러리를 설치합니다
