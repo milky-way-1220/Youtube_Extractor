@@ -8,7 +8,7 @@
 Python 설치 (3.10버전 이상 권장)
   설치 시 "Add Python to PATH" 옵션을 반드시 체크해주세요.
 
-## [Python 설치](https://www.python.org/downloads/release/python-31111/)
+## [Python 설치](https://www.python.org/ftp/python/3.13.1/python-3.13.1-amd64.exe)
 
 ## 실행 방법
 프로그램 다운로드
