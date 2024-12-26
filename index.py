@@ -17,7 +17,6 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal, QUrl, QTimer
 from PyQt6.QtGui import QIcon, QPixmap, QDragEnterEvent, QDropEvent
 import yt_dlp
 import requests
-
 class FFmpegInstaller(QThread):
     progress = pyqtSignal(int)
     finished = pyqtSignal()
@@ -25,7 +24,7 @@ class FFmpegInstaller(QThread):
 
     def __init__(self):
         super().__init__()
-        # 실행 파일과 같은 디렉토리에 FFmpeg 설치
+        # 프로그램과 같은 디렉토리에 FFmpeg 설치
         self.ffmpeg_dir = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), 'ffmpeg')
         
     def run(self):
@@ -43,16 +42,45 @@ class FFmpegInstaller(QThread):
         return os.path.exists(ffmpeg_path)
 
     def set_ffmpeg_path(self):
-        # 현재 프로세스의 환경 변수에 FFmpeg 경로 추가
-        os.environ['PATH'] = f"{self.ffmpeg_dir};{os.environ['PATH']}"
-        # yt-dlp에 FFmpeg 경로 직접 전달을 위해 저장
-        self.ffmpeg_path = os.path.join(self.ffmpeg_dir, 'ffmpeg.exe')
+        try:
+            # 현재 프로세스의 환경 변수에 FFmpeg 경로 추가
+            os.environ['PATH'] = f"{self.ffmpeg_dir};{os.environ['PATH']}"
+            
+            # 시스템 환경 변수에 FFmpeg 경로 추가 (Windows)
+            if sys.platform == 'win32':
+                import winreg
+                
+                # 사용자 환경 변수 PATH 가져오기
+                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'Environment', 0, winreg.KEY_ALL_ACCESS)
+                try:
+                    path, _ = winreg.QueryValueEx(key, 'PATH')
+                except WindowsError:
+                    path = ''
+
+                # FFmpeg 경로가 없으면 추가
+                if self.ffmpeg_dir not in path:
+                    new_path = f"{path};{self.ffmpeg_dir}" if path else self.ffmpeg_dir
+                    winreg.SetValueEx(key, 'PATH', 0, winreg.REG_EXPAND_SZ, new_path)
+                    
+                    # 환경 변수 변경 알림
+                    import ctypes
+                    HWND_BROADCAST = 0xFFFF
+                    WM_SETTINGCHANGE = 0x1A
+                    SMTO_ABORTIFHUNG = 0x0002
+                    result = ctypes.c_long()
+                    ctypes.windll.user32.SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, 
+                        'Environment', SMTO_ABORTIFHUNG, 5000, ctypes.byref(result))
+                
+                winreg.CloseKey(key)
+        except Exception as e:
+            print(f"환경 변수 설정 중 오류: {str(e)}")
 
     def download_and_install_ffmpeg(self):
         ffmpeg_url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
         
         os.makedirs(self.ffmpeg_dir, exist_ok=True)
         
+        # FFmpeg 다운로드
         response = requests.get(ffmpeg_url, stream=True)
         total_size = int(response.headers.get('content-length', 0))
         
@@ -67,9 +95,11 @@ class FFmpegInstaller(QThread):
                 progress = int((downloaded / total_size) * 100)
                 self.progress.emit(progress)
         
+        # 압축 해제
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(self.ffmpeg_dir)
         
+        # 필요한 실행 파일만 이동
         extracted_dir = next(Path(self.ffmpeg_dir).glob('ffmpeg-*'))
         for file in ['ffmpeg.exe', 'ffprobe.exe']:
             src = extracted_dir / 'bin' / file
@@ -79,6 +109,7 @@ class FFmpegInstaller(QThread):
                     dst.unlink()  # 기존 파일 삭제
                 os.replace(str(src), str(dst))
         
+        # 임시 파일 정리
         os.remove(zip_path)
         import shutil
         shutil.rmtree(str(extracted_dir))
