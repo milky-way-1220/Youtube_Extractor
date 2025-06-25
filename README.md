@@ -2,7 +2,7 @@
 
 ## 다운로드
 실행 파일은 다음 위치에서 다운로드할 수 있습니다:
-- [최신 릴리즈](https://github.com/milky-way-1220/Youtube_Downloader/archive/refs/heads/main.zip)
+- [최신 릴리즈 버전](https://github.com/milky-way-1220/Youtube_Downloader/archive/refs/heads/main.zip)
 
 ## !!실행 하기 전 파이썬 필요!!
 Python 설치 (3.10버전 이상 권장)
