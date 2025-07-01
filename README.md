@@ -1,4 +1,4 @@
-# 🎬 YouTube Downloader
+# 🎬 YouTube Extractor
 
 YouTube 영상을 간편하게 다운로드할 수 있는 프로그램입니다.
 
