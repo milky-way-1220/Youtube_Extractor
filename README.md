@@ -1,22 +1,82 @@
-# YouTube Downloader
+# 🎬 YouTube Downloader
 
-## 다운로드
-실행 파일은 다음 위치에서 다운로드할 수 있습니다:
-- [최신 릴리즈 버전](https://github.com/milky-way-1220/Youtube_Downloader/archive/refs/heads/main.zip)
+YouTube 영상을 간편하게 다운로드할 수 있는 프로그램입니다.
 
-## !!실행 하기 전 파이썬 필요!!
-Python 설치 (3.10버전 이상 권장)
-  설치 시 "Add Python to PATH" 옵션을 반드시 체크해주세요.
+## 📥 다운로드
 
-## [Python 설치](https://www.python.org/ftp/python/3.13.1/python-3.13.1-amd64.exe)
+프로그램을 다운로드 받으세요:
 
-## 실행 방법
-프로그램 다운로드
-다운로드 받은 파일의 압축을 풀고, 해당 폴더에서 ``setup.bat``을 실행하여 필요한 라이브러리를 설치합니다
-``run.bat``을 실행하여 프로그램을 시작합니다
+```
+https://github.com/milky-way-1220/Youtube_Downloader/archive/refs/heads/main.zip
+```
 
-## 사용 방법
-Youtube 영상의 URL을 입력합니다.
-MP4(비디오) 또는 MP3(오디오) 형식을 선택합니다.
-저장 위치를 선택합니다.
-다운로드 버튼을 클릭합니다.
+또는 [여기를 클릭하여 다운로드](https://github.com/milky-way-1220/Youtube_Downloader/archive/refs/heads/main.zip)
+
+## ⚠️ 시작하기 전에 - Python 설치 필수!
+
+이 프로그램을 사용하려면 먼저 Python을 설치해야 합니다.
+
+### Python 설치 방법
+
+1. **Python 다운로드**: [Python 3.13.1 다운로드](https://www.python.org/ftp/python/3.13.1/python-3.13.1-amd64.exe)
+
+2. **설치 시 주의사항**: 
+   - 설치할 때 반드시 **"Add Python to PATH"** 옵션에 체크하세요!
+   - Python 3.10 버전 이상을 권장합니다
+
+## 🚀 프로그램 실행 방법
+
+### 1단계: 파일 준비
+```bash
+# 다운로드 받은 ZIP 파일의 압축을 풀어주세요
+# 압축을 푼 폴더로 이동합니다
+```
+
+### 2단계: 라이브러리 설치
+```bash
+# 폴더 내에서 setup.bat 파일을 더블클릭하여 실행
+setup.bat
+```
+> 💡 이 과정은 프로그램에 필요한 라이브러리들을 자동으로 설치합니다.
+
+### 3단계: 프로그램 시작
+```bash
+# run.bat 파일을 더블클릭하여 프로그램 실행
+run.bat
+```
+
+## 📖 사용 방법
+
+프로그램이 실행되면 다음 단계를 따라주세요:
+
+### 1️⃣ YouTube URL 입력
+```
+예시: https://www.youtube.com/watch?v=dQw4w9WgXcQ
+```
+
+### 2️⃣ 파일 형식 선택
+- **MP4** (비디오): 영상과 음성이 모두 포함된 동영상 파일
+- **MP3** (오디오): 음성만 포함된 음악 파일
+
+### 3️⃣ 저장 위치 선택
+원하는 폴더를 선택하여 파일이 저장될 위치를 정합니다.
+
+### 4️⃣ 다운로드 시작
+**다운로드** 버튼을 클릭하면 완료!
+
+## 🔧 문제 해결
+
+### Python이 설치되지 않았다면?
+```
+'python'은(는) 내부 또는 외부 명령, 실행할 수 있는 프로그램, 또는 배치 파일이 아닙니다.
+```
+이런 오류가 나타나면 Python 설치를 다시 확인해주세요.
+
+### 다운로드가 실패한다면?
+- 인터넷 연결을 확인해주세요
+- YouTube URL이 올바른지 확인해주세요
+- 비공개 영상은 다운로드할 수 없습니다
+
+---
+
+**즐거운 다운로드 되세요! 🎉**
