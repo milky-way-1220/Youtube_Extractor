@@ -6,11 +6,7 @@ YouTube 영상을 간편하게 다운로드할 수 있는 프로그램입니다.
 
 프로그램을 다운로드 받으세요:
 
-```
-https://github.com/milky-way-1220/Youtube_Downloader/archive/refs/heads/main.zip
-```
-
-또는 [여기를 클릭하여 다운로드](https://github.com/milky-way-1220/Youtube_Downloader/archive/refs/heads/main.zip)
+[여기를 클릭하여 다운로드](https://github.com/milky-way-1220/Youtube_Downloader/archive/refs/heads/main.zip)
 
 ## ⚠️ 시작하기 전에 - Python 설치 필수!
 
