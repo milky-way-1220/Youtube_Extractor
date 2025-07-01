@@ -1,5 +1,5 @@
 @echo off
 echo Starting...
+echo To exit the program please click the Close button.
 python index.py
-echo To exit the progra, please click the Close button
 pause
