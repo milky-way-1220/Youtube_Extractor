@@ -46,6 +46,7 @@ run.bat
 프로그램이 실행되면 다음 단계를 따라주세요:
 
 ### 1️⃣ YouTube URL 입력
+예시
 ```
 https://www.youtube.com/watch?v=dQw4w9WgXcQ
 ```
