@@ -47,7 +47,7 @@ run.bat
 
 ### 1️⃣ YouTube URL 입력
 ```
-예시: https://www.youtube.com/watch?v=dQw4w9WgXcQ
+https://www.youtube.com/watch?v=dQw4w9WgXcQ
 ```
 
 ### 2️⃣ 파일 형식 선택
