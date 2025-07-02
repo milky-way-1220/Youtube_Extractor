@@ -27,14 +27,12 @@ class FFmpegInstaller(QThread):
 
     def __init__(self):
         super().__init__()
-        # 프로그램과 같은 디렉토리에 FFmpeg 설치
         self.ffmpeg_dir = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), 'ffmpeg')
         
     def run(self):
         try:
             if not self.check_ffmpeg():
                 self.download_and_install_ffmpeg()
-            # 환경 변수 설정을 실행 시점에 항상 수행
             self.set_ffmpeg_path()
             self.finished.emit()
         except Exception as e:
@@ -46,26 +44,21 @@ class FFmpegInstaller(QThread):
 
     def set_ffmpeg_path(self):
         try:
-            # 현재 프로세스의 환경 변수에 FFmpeg 경로 추가
             os.environ['PATH'] = f"{self.ffmpeg_dir};{os.environ['PATH']}"
             
-            # 시스템 환경 변수에 FFmpeg 경로 추가 (Windows)
             if sys.platform == 'win32':
                 import winreg
                 
-                # 사용자 환경 변수 PATH 가져오기
                 key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'Environment', 0, winreg.KEY_ALL_ACCESS)
                 try:
                     path, _ = winreg.QueryValueEx(key, 'PATH')
                 except WindowsError:
                     path = ''
 
-                # FFmpeg 경로가 없으면 추가
                 if self.ffmpeg_dir not in path:
                     new_path = f"{path};{self.ffmpeg_dir}" if path else self.ffmpeg_dir
                     winreg.SetValueEx(key, 'PATH', 0, winreg.REG_EXPAND_SZ, new_path)
                     
-                    # 환경 변수 변경 알림
                     import ctypes
                     HWND_BROADCAST = 0xFFFF
                     WM_SETTINGCHANGE = 0x1A
@@ -85,7 +78,6 @@ class FFmpegInstaller(QThread):
             
             os.makedirs(self.ffmpeg_dir, exist_ok=True)
             
-            # FFmpeg 다운로드
             response = requests.get(ffmpeg_url, stream=True)
             total_size = int(response.headers.get('content-length', 0))
             
@@ -104,35 +96,29 @@ class FFmpegInstaller(QThread):
                     progress = int((downloaded / total_size) * 100)
                     self.progress.emit(progress)
             
-            # 체크섬 검증
             if sha256_hash.hexdigest() != ffmpeg_sha256:
                 raise Exception("FFmpeg 다운로드 파일이 손상되었습니다.")
 
-            # 압축 해제
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(self.ffmpeg_dir)
             
-            # 필요한 실행 파일만 이동
             extracted_dir = next(Path(self.ffmpeg_dir).glob('ffmpeg-*'))
             for file in ['ffmpeg.exe', 'ffprobe.exe']:
                 src = extracted_dir / 'bin' / file
                 dst = Path(self.ffmpeg_dir) / file
                 if src.exists():
                     if dst.exists():
-                        dst.unlink()  # 기존 파일 삭제
+                        dst.unlink() 
                     os.replace(str(src), str(dst))
             
-            # 임시 파일 정리
             os.remove(zip_path)
             import shutil
             shutil.rmtree(str(extracted_dir))
             
-            # 설치 확인
             if not self.check_ffmpeg():
                 raise Exception("FFmpeg 설치 확인 실패")
                 
         except Exception as e:
-            # 설치 실패 시 정리
             if os.path.exists(zip_path):
                 os.remove(zip_path)
             if os.path.exists(self.ffmpeg_dir):
@@ -236,31 +222,25 @@ class YouTubeDownloader(QMainWindow):
         self.setWindowTitle("Youtube Extractor")
         self.setMinimumWidth(600)
         
-        # 시스템 트레이 아이콘 설정
         self.create_tray_icon()
         
         self.setup_ui()
         self.install_ffmpeg()
         
-        # 종료 이벤트 처리를 위한 플래그
         self.is_quitting = False
 
     def create_tray_icon(self):
-        # 아이콘 리소스 로드
         icon_path = self.get_resource_path('icon.ico')
         self.tray_icon = QSystemTrayIcon(self)
         self.tray_icon.setIcon(QIcon(icon_path))
         
-        # 트레이 메뉴 생성
         tray_menu = QMenu()
         show_action = tray_menu.addAction("보이기")
         quit_action = tray_menu.addAction("종료")
         
-        # 이벤트 연결
         show_action.triggered.connect(self.show)
         quit_action.triggered.connect(self.quit_application)
         
-        # 트레이 아이콘 더블 클릭 이벤트
         self.tray_icon.activated.connect(self.tray_icon_activated)
         
         self.tray_icon.setContextMenu(tray_menu)
@@ -372,22 +352,18 @@ class YouTubeDownloader(QMainWindow):
             }
         """)
 
-        # 중앙 위젯 설정
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         layout = QVBoxLayout(central_widget)
         layout.setContentsMargins(20, 20, 20, 20)
 
-        # FFmpeg 설치 진행률
         self.ffmpeg_progress = QProgressBar()
         self.ffmpeg_progress.hide()
         layout.addWidget(self.ffmpeg_progress)
 
-        # 포맷 선택 버튼
         format_layout = QHBoxLayout()
         self.format_group = QButtonGroup(self)
 
-        # MP4 버튼
         self.mp4_radio = QPushButton("MP4")
         self.mp4_radio.setCheckable(True)
         self.mp4_radio.setChecked(True)
@@ -396,7 +372,6 @@ class YouTubeDownloader(QMainWindow):
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
 """))
 
-        # MP3 버튼
         self.mp3_radio = QPushButton("MP3")
         self.mp3_radio.setCheckable(True)
         self.mp3_radio.setObjectName("formatBtn")
@@ -404,17 +379,14 @@ class YouTubeDownloader(QMainWindow):
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
 """))
 
-        # 버튼 그룹에 추가
         self.format_group.addButton(self.mp4_radio)
         self.format_group.addButton(self.mp3_radio)
 
-        # 레이아웃에 추가
         format_layout.addWidget(self.mp4_radio)
         format_layout.addWidget(self.mp3_radio)
         format_layout.addStretch()
         layout.addLayout(format_layout)
 
-        # URL 입력 및 다운로드 버튼
         input_layout = QHBoxLayout()
         self.url_input = QLineEdit()
         self.url_input.setPlaceholderText("YouTube URL을 입력하세요")
@@ -431,7 +403,6 @@ class YouTubeDownloader(QMainWindow):
         input_layout.addWidget(self.cancel_btn)
         layout.addLayout(input_layout)
 
-        # 비디오 정보 표시 영역
         self.video_info_widget = QWidget()
         video_info_layout = QVBoxLayout(self.video_info_widget)
         self.thumbnail_label = QLabel()
@@ -445,7 +416,6 @@ class YouTubeDownloader(QMainWindow):
         video_info_layout.addWidget(self.duration_label)
         self.video_info_widget.hide()
         layout.addWidget(self.video_info_widget)
-        # 진행률 표시 영역
         self.progress_widget = QWidget()
         progress_layout = QVBoxLayout(self.progress_widget)
         self.progress_bar = QProgressBar()
@@ -458,23 +428,19 @@ class YouTubeDownloader(QMainWindow):
         self.progress_widget.hide()
         layout.addWidget(self.progress_widget)
 
-        # 상태 메시지
         self.status_label = QLabel()
         layout.addWidget(self.status_label)
 
-        # 이벤트 연결
         self.location_btn.clicked.connect(self.select_directory)
         self.download_btn.clicked.connect(self.start_download)
         self.cancel_btn.clicked.connect(self.cancel_download)
         self.url_input.textChanged.connect(self.fetch_video_info)
 
-        # 초기 설정
         self.download_path = ""
         self.download_thread = None
         self.video_info_thread = None
         self.status_timer = None
 
-        # 드래그 앤 드롭 활성화
         self.setAcceptDrops(True)
 
     def install_ffmpeg(self):
@@ -565,7 +531,6 @@ class YouTubeDownloader(QMainWindow):
             self.download_thread.cancel()
             self.download_thread.wait()
             
-            # 임시 파일 정리
             try:
                 partial_files = glob.glob(os.path.join(self.download_path, "*.part"))
                 for file in partial_files:
@@ -620,10 +585,8 @@ class YouTubeDownloader(QMainWindow):
         self.progress_widget.hide()
         self.show_status("다운로드가 완료되었습니다!", "success", 3000)
         
-        # 저장된 파일 경로
         file_path = os.path.abspath(filename)
         
-        # 완료 알림과 파일 열기 옵션
         self.tray_icon.showMessage(
             "다운로드 완료",
             f"파일이 저장되었습니다: {os.path.basename(filename)}",
@@ -631,24 +594,19 @@ class YouTubeDownloader(QMainWindow):
             5000
         )
         
-        # 파일 위치 열기 버튼 표시
         open_folder_btn = QPushButton("파일 위치 열기")
         open_folder_btn.clicked.connect(lambda: os.startfile(os.path.dirname(file_path)))
         open_folder_btn.setStyleSheet(self.download_btn.styleSheet())
         
-        # 임시 레이아웃에 버튼 추가
         temp_widget = QWidget()
         temp_layout = QHBoxLayout(temp_widget)
         temp_layout.addWidget(open_folder_btn)
         temp_layout.addStretch()
         
-        # 기존 레이아웃에 추가
         self.centralWidget().layout().addWidget(temp_widget)
         
-        # 5초 후 버튼 제거
         QTimer.singleShot(5000, lambda: temp_widget.deleteLater())
         
-        # 다운로드 히스토리에 추가
         self.save_download_history(filename)
 
     def save_download_history(self, filename):
@@ -662,7 +620,6 @@ class YouTubeDownloader(QMainWindow):
         except Exception:
             pass
         
-        # 새로운 다운로드 기록 추가
         history.append({
             'filename': os.path.basename(filename),
             'path': os.path.abspath(filename),
@@ -670,7 +627,6 @@ class YouTubeDownloader(QMainWindow):
             'url': self.url_input.text()
         })
         
-        # 최근 100개 기록만 유지
         history = history[-100:]
         
         try:
@@ -689,14 +645,12 @@ class YouTubeDownloader(QMainWindow):
             with open(history_file, 'r', encoding='utf-8') as f:
                 history = json.load(f)
                 
-            # 히스토리 창 생성
             history_dialog = QDialog(self)
             history_dialog.setWindowTitle("다운로드 기록")
             history_dialog.setMinimumWidth(500)
             
             layout = QVBoxLayout(history_dialog)
             
-            # 히스토리 목록 위젯
             list_widget = QListWidget()
             for item in reversed(history):
                 date = datetime.datetime.fromisoformat(item['date']).strftime('%Y-%m-%d %H:%M')
@@ -706,7 +660,6 @@ class YouTubeDownloader(QMainWindow):
             
             layout.addWidget(list_widget)
             
-            # 파일 열기 버튼
             open_btn = QPushButton("파일 위치 열기")
             def open_selected():
                 if list_widget.currentItem():
