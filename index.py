@@ -7,19 +7,16 @@ import zipfile
 import ssl
 import certifi
 import json
-import glob
-import datetime
 from datetime import timedelta
 from pathlib import Path
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                            QHBoxLayout, QPushButton, QLineEdit, QLabel, 
                            QProgressBar, QFileDialog, QButtonGroup, QRadioButton,
-                           QSystemTrayIcon, QMenu, QDialog, QListWidget, QListWidgetItem)
+                           QSystemTrayIcon, QMenu)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QUrl, QTimer
 from PyQt6.QtGui import QIcon, QPixmap, QDragEnterEvent, QDropEvent
 import yt_dlp
 import requests
-
 class FFmpegInstaller(QThread):
     progress = pyqtSignal(int)
     finished = pyqtSignal()
@@ -72,58 +69,40 @@ class FFmpegInstaller(QThread):
             print(f"환경 변수 설정 중 오류: {str(e)}")
 
     def download_and_install_ffmpeg(self):
-        try:
-            ffmpeg_url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
-            ffmpeg_sha256 = requests.get(f"{ffmpeg_url}.sha256").text.strip()
-            
-            os.makedirs(self.ffmpeg_dir, exist_ok=True)
-            
-            response = requests.get(ffmpeg_url, stream=True)
-            total_size = int(response.headers.get('content-length', 0))
-            
-            zip_path = os.path.join(self.ffmpeg_dir, 'ffmpeg.zip')
-            block_size = 1024
-            downloaded = 0
-            
-            import hashlib
-            sha256_hash = hashlib.sha256()
-            
-            with open(zip_path, 'wb') as f:
-                for data in response.iter_content(block_size):
-                    downloaded += len(data)
-                    f.write(data)
-                    sha256_hash.update(data)
-                    progress = int((downloaded / total_size) * 100)
-                    self.progress.emit(progress)
-            
-            if sha256_hash.hexdigest() != ffmpeg_sha256:
-                raise Exception("FFmpeg 다운로드 파일이 손상되었습니다.")
+        ffmpeg_url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+        
+        os.makedirs(self.ffmpeg_dir, exist_ok=True)
+        
+        response = requests.get(ffmpeg_url, stream=True)
+        total_size = int(response.headers.get('content-length', 0))
+        
+        zip_path = os.path.join(self.ffmpeg_dir, 'ffmpeg.zip')
+        block_size = 1024
+        downloaded = 0
+        
+        with open(zip_path, 'wb') as f:
+            for data in response.iter_content(block_size):
+                downloaded += len(data)
+                f.write(data)
+                progress = int((downloaded / total_size) * 100)
+                self.progress.emit(progress)
+        
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(self.ffmpeg_dir)
+        
+        extracted_dir = next(Path(self.ffmpeg_dir).glob('ffmpeg-*'))
+        for file in ['ffmpeg.exe', 'ffprobe.exe']:
+            src = extracted_dir / 'bin' / file
+            dst = Path(self.ffmpeg_dir) / file
+            if src.exists():
+                if dst.exists():
+                    dst.unlink()
+                os.replace(str(src), str(dst))
+        
+        os.remove(zip_path)
+        import shutil
+        shutil.rmtree(str(extracted_dir))
 
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(self.ffmpeg_dir)
-            
-            extracted_dir = next(Path(self.ffmpeg_dir).glob('ffmpeg-*'))
-            for file in ['ffmpeg.exe', 'ffprobe.exe']:
-                src = extracted_dir / 'bin' / file
-                dst = Path(self.ffmpeg_dir) / file
-                if src.exists():
-                    if dst.exists():
-                        dst.unlink() 
-                    os.replace(str(src), str(dst))
-            
-            os.remove(zip_path)
-            import shutil
-            shutil.rmtree(str(extracted_dir))
-            
-            if not self.check_ffmpeg():
-                raise Exception("FFmpeg 설치 확인 실패")
-                
-        except Exception as e:
-            if os.path.exists(zip_path):
-                os.remove(zip_path)
-            if os.path.exists(self.ffmpeg_dir):
-                shutil.rmtree(self.ffmpeg_dir)
-            raise Exception(f"FFmpeg 설치 실패: {str(e)}")
 class DownloadThread(QThread):
     progress = pyqtSignal(dict)
     finished = pyqtSignal(str)
@@ -138,7 +117,7 @@ class DownloadThread(QThread):
 
     def progress_hook(self, d):
         if self.is_cancelled:
-            raise Exception("다운로드 취소됨 취소 후 PART파일을 삭제해주세요.")
+            raise Exception("Download cancelled")
             
         if d['status'] == 'downloading':
             downloaded = d.get('downloaded_bytes', 0)
@@ -219,7 +198,7 @@ class VideoInfoThread(QThread):
 class YouTubeDownloader(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Youtube Extractor")
+        self.setWindowTitle("미디어 다운로더")
         self.setMinimumWidth(600)
         
         self.create_tray_icon()
@@ -530,14 +509,6 @@ class YouTubeDownloader(QMainWindow):
         if self.download_thread and self.download_thread.isRunning():
             self.download_thread.cancel()
             self.download_thread.wait()
-            
-            try:
-                partial_files = glob.glob(os.path.join(self.download_path, "*.part"))
-                for file in partial_files:
-                    os.remove(file)
-            except Exception as e:
-                print(f"임시 파일 정리 중 오류: {str(e)}")
-            
             self.show_status("다운로드가 취소되었습니다.", "info", 3000)
             self.cancel_btn.hide()
             self.download_btn.show()
@@ -551,7 +522,6 @@ class YouTubeDownloader(QMainWindow):
 
             self.progress_bar.setValue(int(percentage))
             
-            # Adjust speed display with 20% compensation
             adjusted_speed = speed * 1.2
             self.speed_label.setText(f"다운로드 속도: {self.format_speed(adjusted_speed)}")
             self.eta_label.setText(f"남은 시간: {self.format_time(eta)}")
@@ -585,93 +555,12 @@ class YouTubeDownloader(QMainWindow):
         self.progress_widget.hide()
         self.show_status("다운로드가 완료되었습니다!", "success", 3000)
         
-        file_path = os.path.abspath(filename)
-        
         self.tray_icon.showMessage(
             "다운로드 완료",
-            f"파일이 저장되었습니다: {os.path.basename(filename)}",
+            f"파일이 저장되었습니다: {filename}",
             QSystemTrayIcon.MessageIcon.Information,
-            5000
+            3000
         )
-        
-        open_folder_btn = QPushButton("파일 위치 열기")
-        open_folder_btn.clicked.connect(lambda: os.startfile(os.path.dirname(file_path)))
-        open_folder_btn.setStyleSheet(self.download_btn.styleSheet())
-        
-        temp_widget = QWidget()
-        temp_layout = QHBoxLayout(temp_widget)
-        temp_layout.addWidget(open_folder_btn)
-        temp_layout.addStretch()
-        
-        self.centralWidget().layout().addWidget(temp_widget)
-        
-        QTimer.singleShot(5000, lambda: temp_widget.deleteLater())
-        
-        self.save_download_history(filename)
-
-    def save_download_history(self, filename):
-        history_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'download_history.json')
-        history = []
-        
-        try:
-            if os.path.exists(history_file):
-                with open(history_file, 'r', encoding='utf-8') as f:
-                    history = json.load(f)
-        except Exception:
-            pass
-        
-        history.append({
-            'filename': os.path.basename(filename),
-            'path': os.path.abspath(filename),
-            'date': datetime.datetime.now().isoformat(),
-            'url': self.url_input.text()
-        })
-        
-        history = history[-100:]
-        
-        try:
-            with open(history_file, 'w', encoding='utf-8') as f:
-                json.dump(history, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"히스토리 저장 중 오류: {str(e)}")
-
-    def show_download_history(self):
-        history_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'download_history.json')
-        if not os.path.exists(history_file):
-            self.show_status("다운로드 기록이 없습니다.", "info", 3000)
-            return
-            
-        try:
-            with open(history_file, 'r', encoding='utf-8') as f:
-                history = json.load(f)
-                
-            history_dialog = QDialog(self)
-            history_dialog.setWindowTitle("다운로드 기록")
-            history_dialog.setMinimumWidth(500)
-            
-            layout = QVBoxLayout(history_dialog)
-            
-            list_widget = QListWidget()
-            for item in reversed(history):
-                date = datetime.datetime.fromisoformat(item['date']).strftime('%Y-%m-%d %H:%M')
-                list_item = QListWidgetItem(f"{date} - {item['filename']}")
-                list_item.setData(Qt.ItemDataRole.UserRole, item)
-                list_widget.addItem(list_item)
-            
-            layout.addWidget(list_widget)
-            
-            open_btn = QPushButton("파일 위치 열기")
-            def open_selected():
-                if list_widget.currentItem():
-                    item_data = list_widget.currentItem().data(Qt.ItemDataRole.UserRole)
-                    os.startfile(os.path.dirname(item_data['path']))
-            
-            open_btn.clicked.connect(open_selected)
-            layout.addWidget(open_btn)
-            
-            history_dialog.exec()
-        except Exception as e:
-            self.show_status(f"히스토리 로딩 중 오류: {str(e)}", "error", 3000)
 
     def show_status(self, message, status_type="info", duration=3000):
         color = {
