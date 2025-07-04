@@ -198,7 +198,7 @@ class VideoInfoThread(QThread):
 class YouTubeDownloader(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("미디어 다운로더")
+        self.setWindowTitle("Youtube Extractor")
         self.setMinimumWidth(600)
         
         self.create_tray_icon()
@@ -235,7 +235,7 @@ class YouTubeDownloader(QMainWindow):
             event.ignore()
             self.hide()
             self.tray_icon.showMessage(
-                "미디어 다운로더",
+                "Youtube Extractor",
                 "프로그램이 시스템 트레이로 최소화되었습니다.",
                 QSystemTrayIcon.MessageIcon.Information,
                 2000
