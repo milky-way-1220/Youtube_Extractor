@@ -14,7 +14,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                            QHBoxLayout, QPushButton, QLineEdit, QLabel, 
                            QProgressBar, QFileDialog, QButtonGroup, QRadioButton,
-                           QSystemTrayIcon, QMenu, QDialog, QListWidget, QListWidgetItem)
+                           QSystemTrayIcon, QMenu, QDialog, QListWidget, QListWidgetItem, QCheckBox)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QUrl, QTimer
 from PyQt6.QtGui import QIcon, QPixmap, QDragEnterEvent, QDropEvent
 import yt_dlp
@@ -72,9 +72,9 @@ class FFmpegInstaller(QThread):
             print(f"환경 변수 설정 중 오류: {str(e)}")
 
     def download_and_install_ffmpeg(self):
+        import shutil
         try:
             ffmpeg_url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
-            ffmpeg_sha256 = requests.get(f"{ffmpeg_url}.sha256").text.strip()
             
             os.makedirs(self.ffmpeg_dir, exist_ok=True)
             
@@ -82,22 +82,15 @@ class FFmpegInstaller(QThread):
             total_size = int(response.headers.get('content-length', 0))
             
             zip_path = os.path.join(self.ffmpeg_dir, 'ffmpeg.zip')
-            block_size = 1024
+            block_size = 1024 * 1024  # 1MB
             downloaded = 0
-            
-            import hashlib
-            sha256_hash = hashlib.sha256()
             
             with open(zip_path, 'wb') as f:
                 for data in response.iter_content(block_size):
                     downloaded += len(data)
                     f.write(data)
-                    sha256_hash.update(data)
                     progress = int((downloaded / total_size) * 100)
                     self.progress.emit(progress)
-            
-            if sha256_hash.hexdigest() != ffmpeg_sha256:
-                raise Exception("FFmpeg 다운로드 파일이 손상되었습니다.")
 
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(self.ffmpeg_dir)
@@ -112,14 +105,13 @@ class FFmpegInstaller(QThread):
                     os.replace(str(src), str(dst))
             
             os.remove(zip_path)
-            import shutil
             shutil.rmtree(str(extracted_dir))
             
             if not self.check_ffmpeg():
                 raise Exception("FFmpeg 설치 확인 실패")
                 
         except Exception as e:
-            if os.path.exists(zip_path):
+            if 'zip_path' in locals() and os.path.exists(zip_path):
                 os.remove(zip_path)
             if os.path.exists(self.ffmpeg_dir):
                 shutil.rmtree(self.ffmpeg_dir)
@@ -128,17 +120,21 @@ class DownloadThread(QThread):
     progress = pyqtSignal(dict)
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
+    playlist_progress = pyqtSignal(dict)  # 플레이리스트 진행 상황을 위한 시그널
 
-    def __init__(self, url, format_type, download_path):
+    def __init__(self, url, format_type, download_path, is_playlist=False):
         super().__init__()
         self.url = url
         self.format_type = format_type
         self.download_path = download_path
         self.is_cancelled = False
+        self.is_playlist = is_playlist
+        self.current_video_index = 0
+        self.total_videos = 0
 
     def progress_hook(self, d):
         if self.is_cancelled:
-            raise Exception("다운로드 취소됨 취소 후 PART파일을 삭제해주세요.")
+            raise Exception("다운로드가 취소되었습니다. 취소 후 PART파일을 삭제해주세요.")
             
         if d['status'] == 'downloading':
             downloaded = d.get('downloaded_bytes', 0)
@@ -154,7 +150,19 @@ class DownloadThread(QThread):
                 'eta': eta,
                 'percentage': (downloaded / total * 100) if total > 0 else 0
             }
+            
+            if self.is_playlist:
+                progress_data['current_video'] = self.current_video_index
+                progress_data['total_videos'] = self.total_videos
+                
             self.progress.emit(progress_data)
+        
+        elif d['status'] == 'finished' and self.is_playlist:
+            self.current_video_index += 1
+            self.playlist_progress.emit({
+                'current': self.current_video_index,
+                'total': self.total_videos
+            })
 
     def run(self):
         try:
@@ -180,12 +188,24 @@ class DownloadThread(QThread):
                 'noprogress': True,
             }
 
+            if self.is_playlist:
+                options['extract_flat'] = False
+                options['playlistend'] = None
+
             with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
                 with yt_dlp.YoutubeDL(options) as ydl:
+                    if self.is_playlist:
+                        info = ydl.extract_info(self.url, download=False)
+                        self.total_videos = len(info['entries']) if '_type' in info and info['_type'] == 'playlist' else 1
+                        self.current_video_index = 0
+                    
                     info = ydl.extract_info(self.url, download=True)
-                    filename = ydl.prepare_filename(info)
-                    if self.format_type == 'mp3':
-                        filename = os.path.splitext(filename)[0] + '.mp3'
+                    if isinstance(info, dict):
+                        filename = ydl.prepare_filename(info)
+                        if self.format_type == 'mp3':
+                            filename = os.path.splitext(filename)[0] + '.mp3'
+                    else:
+                        filename = "플레이리스트 다운로드 완료"
                     self.finished.emit(filename)
 
         except Exception as e:
@@ -421,10 +441,13 @@ class YouTubeDownloader(QMainWindow):
         self.progress_bar = QProgressBar()
         self.speed_label = QLabel()
         self.eta_label = QLabel()
+        self.playlist_progress_label = QLabel()  # 플레이리스트 진행 상황 라벨
+        self.playlist_progress_label.hide()
         
         progress_layout.addWidget(self.progress_bar)
         progress_layout.addWidget(self.speed_label)
         progress_layout.addWidget(self.eta_label)
+        progress_layout.addWidget(self.playlist_progress_label)
         self.progress_widget.hide()
         layout.addWidget(self.progress_widget)
 
@@ -444,6 +467,12 @@ class YouTubeDownloader(QMainWindow):
         self.setAcceptDrops(True)
 
     def install_ffmpeg(self):
+        # 이미 ffmpeg.exe가 있으면 설치 스레드 실행하지 않음
+        ffmpeg_path = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), 'ffmpeg', 'ffmpeg.exe')
+        if os.path.exists(ffmpeg_path):
+            self.ffmpeg_progress.hide()
+            self.show_status("FFmpeg가 이미 설치되어 있습니다.", "success", 2000)
+            return
         self.ffmpeg_installer = FFmpegInstaller()
         self.ffmpeg_installer.progress.connect(self.ffmpeg_progress.setValue)
         self.ffmpeg_installer.progress.connect(lambda: self.ffmpeg_progress.show())
@@ -461,7 +490,8 @@ class YouTubeDownloader(QMainWindow):
         youtube_patterns = [
             r'^https?://(?:www\.)?youtube\.com/watch\?v=[\w-]+',
             r'^https?://youtu\.be/[\w-]+',
-            r'^https?://(?:www\.)?youtube\.com/shorts/[\w-]+'
+            r'^https?://(?:www\.)?youtube\.com/shorts/[\w-]+',
+            r'^https?://(?:www\.)?youtube\.com/playlist\?list=[\w-]+'  # 플레이리스트 URL 패턴 추가
         ]
         return any(re.match(pattern, url) for pattern in youtube_patterns)
 
@@ -474,8 +504,10 @@ class YouTubeDownloader(QMainWindow):
 
     def fetch_video_info(self):
         url = self.url_input.text()
+        self.download_btn.setEnabled(False)  # 정보 불러오기 전 다운로드 비활성화
         if not self.validate_url(url):
             self.video_info_widget.hide()
+            self.download_btn.setEnabled(True)
             return
 
         self.video_info_thread = VideoInfoThread(url)
@@ -496,8 +528,13 @@ class YouTubeDownloader(QMainWindow):
             self.channel_label.setText(f"채널: {info['channel']}")
             self.duration_label.setText(f"재생 시간: {info['duration']}")
             self.video_info_widget.show()
+            # 플레이리스트 개수 표시
+            if hasattr(info, 'playlist_count') or 'playlist_count' in info:
+                self.status_label.setText(f"플레이리스트: {info.get('playlist_count', '')}개 동영상")
+            self.download_btn.setEnabled(True)
         except Exception as e:
             self.show_status(f"썸네일 로딩 중 오류: {str(e)}", "error", 3000)
+            self.download_btn.setEnabled(True)
 
     def start_download(self):
         if not self.url_input.text():
@@ -514,14 +551,17 @@ class YouTubeDownloader(QMainWindow):
         self.cancel_btn.show()
         self.progress_widget.show()
         self.progress_bar.setValue(0)
+        self.url_input.setReadOnly(True)
 
         format_type = 'mp3' if self.mp3_radio.isChecked() else 'mp4'
+        url = self.url_input.text()
         self.download_thread = DownloadThread(
-            self.url_input.text(),
+            url,
             format_type,
             self.download_path
         )
         self.download_thread.progress.connect(self.update_progress)
+        self.download_thread.playlist_progress.connect(self.update_playlist_progress)
         self.download_thread.finished.connect(self.download_finished)
         self.download_thread.error.connect(self.handle_download_error)
         self.download_thread.start()
@@ -539,9 +579,18 @@ class YouTubeDownloader(QMainWindow):
                 print(f"임시 파일 정리 중 오류: {str(e)}")
             
             self.show_status("다운로드가 취소되었습니다.", "info", 3000)
-            self.cancel_btn.hide()
-            self.download_btn.show()
-            self.progress_widget.hide()
+            self.reset_download_state()
+
+    def reset_download_state(self):
+        self.cancel_btn.hide()
+        self.download_btn.show()
+        self.progress_widget.hide()
+        self.progress_bar.setValue(0)
+        self.speed_label.setText("")
+        self.eta_label.setText("")
+        self.playlist_progress_label.hide()
+        self.playlist_progress_label.setText("")
+        self.url_input.setReadOnly(False)  # URL 입력 다시 활성화
 
     def update_progress(self, data):
         try:
@@ -556,12 +605,29 @@ class YouTubeDownloader(QMainWindow):
             self.speed_label.setText(f"다운로드 속도: {self.format_speed(adjusted_speed)}")
             self.eta_label.setText(f"남은 시간: {self.format_time(eta)}")
             
+            if 'current_video' in data and 'total_videos' in data:
+                self.playlist_progress_label.show()
+                self.playlist_progress_label.setText(
+                    f"플레이리스트 진행 상황: {data['current_video'] + 1}/{data['total_videos']} 동영상"
+                )
+            
             if percentage >= 99.9:
                 self.speed_label.setText("처리중...")
                 self.eta_label.setText("곧 완료됩니다...")
                 
         except Exception as e:
             print(f"Progress update error: {str(e)}")
+
+    def update_playlist_progress(self, data):
+        try:
+            current = data['current']
+            total = data['total']
+            self.playlist_progress_label.show()
+            self.playlist_progress_label.setText(
+                f"플레이리스트 진행 상황: {current}/{total} 동영상"
+            )
+        except Exception as e:
+            print(f"Playlist progress update error: {str(e)}")
 
     def handle_download_error(self, error):
         self.cancel_btn.hide()
@@ -701,6 +767,7 @@ class YouTubeDownloader(QMainWindow):
     def format_time(self, seconds):
         if not seconds:
             return "계산중..."
+        seconds = int(seconds)
         minutes = seconds // 60
         seconds = seconds % 60
         return f"{minutes}:{seconds:02d}"
